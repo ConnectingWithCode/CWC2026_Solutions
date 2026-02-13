@@ -1,10 +1,22 @@
 import random
 import json
 
-# Load word list from JSON file
+# Load word list from JSON files
 with open('wordles.json', 'r') as f:
-    WORD_LIST = json.load(f)
-    WORD_SET = set(WORD_LIST)  # For fast lookup when validating guesses
+    WORD_LIST = json.load(f)  # Words that can be solutions
+
+with open('nonwordles.json', 'r') as f:
+    NON_WORD_LIST = json.load(f)  # Legal guesses but not solutions
+
+# Combined set for fast lookup when validating guesses
+VALID_GUESSES = set(WORD_LIST) | set(NON_WORD_LIST)
+
+# ANSI color codes
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+GRAY = '\033[90m'
+WHITE = '\033[97m'
+RESET = '\033[0m'
 
 def get_feedback(guess, word):
     """
@@ -12,18 +24,20 @@ def get_feedback(guess, word):
     Returns a list with: 🟩 (green - correct spot), 🟨 (yellow - wrong spot), ⬜ (gray - not in word)
     """
     feedback = ["⬜"] * 5
+    word_letters = list(word)
     
     # First pass: mark greens
     for i in range(len(guess)):
         letter = guess[i]
         if letter == word[i]:
             feedback[i] = "🟩"
+            word_letters[i] = None  # Mark as used
     
     # Second pass: mark yellows
     for i in range(len(guess)):
-        letter = guess[i]
-        if feedback[i] == "⬜" and letter in word:
+        if feedback[i] == "⬜" and letter in word_letters:
             feedback[i] = "🟨"
+            word_letters[word_letters.index(letter)] = None  # Mark as used
     
     return feedback
 
@@ -31,12 +45,32 @@ def display_feedback(guess, feedback):
     """Display the guess with colored feedback."""
     return f"{' '.join(guess.upper())} - {' '.join(feedback)}"
 
+def display_keyboard(letter_statuses):
+    """Display alphabet with colored letters based on game state."""
+    alphabet = 'abcdefghijklmnopqrstuvwxyz'
+    keyboard = []
+    
+    for letter in alphabet:
+        if letter in letter_statuses:
+            status = letter_statuses[letter]
+            if status == 'green':
+                keyboard.append(f"{GREEN}{letter.upper()}{RESET}")
+            elif status == 'yellow':
+                keyboard.append(f"{YELLOW}{letter.upper()}{RESET}")
+            elif status == 'gray':
+                keyboard.append(f"{GRAY}{letter.upper()}{RESET}")
+        else:
+            keyboard.append(f"{WHITE}{letter.upper()}{RESET}")
+    
+    return ' '.join(keyboard)
+
 def play_wordle():
     """Main Wordle game loop."""
     word = random.choice(WORD_LIST).lower()
     attempts = 0
     max_attempts = 6
     guessed_words = []
+    letter_statuses = {}  # Track: 'green', 'yellow', or 'gray' for each letter
     
     print("🎮 Welcome to Wordle!")
     print("Guess a 5-letter word. You have 6 attempts.\n")
@@ -53,7 +87,7 @@ def play_wordle():
             print("❌ Please enter a valid 5-letter word.\n")
             continue
         
-        if guess not in WORD_SET:
+        if guess not in VALID_GUESSES:
             print("❌ That word is not in the word list.\n")
             continue
         
@@ -66,6 +100,21 @@ def play_wordle():
         feedback = get_feedback(guess, word)
         print(display_feedback(guess, feedback))
         
+        # Update letter statuses
+        for i, letter in enumerate(guess):
+            if feedback[i] == "🟩":
+                letter_statuses[letter] = 'green'
+            elif feedback[i] == "🟨":
+                if letter not in letter_statuses or letter_statuses[letter] != 'green':
+                    letter_statuses[letter] = 'yellow'
+            elif feedback[i] == "⬜":
+                if letter not in letter_statuses:
+                    letter_statuses[letter] = 'gray'
+        
+        # Display keyboard
+        print(display_keyboard(letter_statuses))
+        print()
+        
         # Check if player won
         if guess == word:
             print(f"\n🎉 You won in {attempts + 1} attempt(s)!")
@@ -73,7 +122,6 @@ def play_wordle():
             return
         
         attempts += 1
-        print()
     
     # Player lost
     print(f"💔 Game Over! You ran out of attempts.")
